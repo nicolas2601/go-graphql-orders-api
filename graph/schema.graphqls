@@ -1,0 +1,91 @@
+type User {
+  id: ID!
+  email: String!
+  createdAt: String!
+}
+
+type Product {
+  id: ID!
+  name: String!
+  price: Float!
+  stock: Int!
+}
+
+type Order {
+  id: ID!
+  user: User!
+  items: [OrderItem!]!
+  total: Float!
+  status: OrderStatus!
+  createdAt: String!
+}
+
+type OrderItem {
+  product: Product!
+  quantity: Int!
+  unitPrice: Float!
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+type AuthPayload {
+  token: String!
+  user: User!
+}
+
+input RegisterInput {
+  email: String!
+  password: String!
+}
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+input ProductFilter {
+  name: String
+  minPrice: Float
+  maxPrice: Float
+}
+
+input OrderItemInput {
+  productId: ID!
+  quantity: Int!
+}
+
+input CreateOrderInput {
+  items: [OrderItemInput!]!
+}
+
+type ProductPage {
+  items: [Product!]!
+  page: Int!
+  pageSize: Int!
+  total: Int!
+}
+
+type OrderPage {
+  items: [Order!]!
+  page: Int!
+  pageSize: Int!
+  total: Int!
+}
+
+type Query {
+  products(filter: ProductFilter, page: Int, pageSize: Int): ProductPage!
+  product(id: ID!): Product
+  myOrders(page: Int, pageSize: Int): OrderPage!
+  order(id: ID!): Order
+}
+
+type Mutation {
+  register(input: RegisterInput!): AuthPayload!
+  login(input: LoginInput!): AuthPayload!
+  createOrder(input: CreateOrderInput!): Order!
+  cancelOrder(id: ID!): Order!
+}
