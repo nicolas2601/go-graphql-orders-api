@@ -16,13 +16,18 @@ type TokenPair struct {
 	RefreshToken string
 }
 
+// dummyPassword se hashea una vez al construir el caso de uso para tener un hash valido contra el
+// cual comparar en el login cuando el email no existe, e igualar asi el tiempo de respuesta.
+const dummyPassword = "timing-attack-mitigation-dummy"
+
 // AuthUseCase orquesta el registro, login y refresh de usuarios.
 type AuthUseCase struct {
-	users  domain.UserRepository
-	hasher domain.PasswordHasher
-	tokens domain.TokenService
-	newID  func() string
-	now    func() time.Time
+	users     domain.UserRepository
+	hasher    domain.PasswordHasher
+	tokens    domain.TokenService
+	newID     func() string
+	now       func() time.Time
+	dummyHash string
 }
 
 // NewAuthUseCase construye el caso de uso con sus dependencias inyectadas.
@@ -36,7 +41,9 @@ func NewAuthUseCase(
 	if users == nil || hasher == nil || tokens == nil || newID == nil || now == nil {
 		panic("usecase: auth dependencies must not be nil")
 	}
-	return &AuthUseCase{users: users, hasher: hasher, tokens: tokens, newID: newID, now: now}
+	uc := &AuthUseCase{users: users, hasher: hasher, tokens: tokens, newID: newID, now: now}
+	uc.dummyHash, _ = hasher.Hash(dummyPassword)
+	return uc
 }
 
 // Register valida email y contrasena, crea el usuario con la contrasena hasheada y emite tokens.
@@ -57,12 +64,14 @@ func (uc *AuthUseCase) Register(ctx context.Context, email, password string) (To
 	if err != nil {
 		return TokenPair{}, domain.User{}, err
 	}
-	if err := uc.users.Create(ctx, user); err != nil {
-		return TokenPair{}, domain.User{}, err
-	}
-
+	// Se emiten los tokens antes de persistir: si la generacion falla, no queda un usuario
+	// creado sin poder devolverle sus tokens. Si Create falla (email duplicado), los tokens
+	// simplemente se descartan.
 	pair, err := uc.issueTokens(user.ID)
 	if err != nil {
+		return TokenPair{}, domain.User{}, err
+	}
+	if err := uc.users.Create(ctx, user); err != nil {
 		return TokenPair{}, domain.User{}, err
 	}
 	return pair, user, nil
@@ -74,6 +83,9 @@ func (uc *AuthUseCase) Login(ctx context.Context, email, password string) (Token
 	email = domain.NormalizeEmail(email)
 	user, err := uc.users.GetByEmail(ctx, email)
 	if errors.Is(err, domain.ErrUserNotFound) {
+		// Comparacion dummy para igualar el tiempo de respuesta: sin esto, un email inexistente
+		// responderia mas rapido (no llega a bcrypt) y permitiria enumerar emails registrados.
+		_ = uc.hasher.Compare(uc.dummyHash, password)
 		return TokenPair{}, domain.User{}, domain.ErrInvalidCredentials
 	}
 	if err != nil {

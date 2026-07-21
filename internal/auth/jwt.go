@@ -15,7 +15,16 @@ const (
 	typeRefresh = "refresh"
 )
 
-var errWrongTokenType = errors.New("wrong token type")
+// minSecretLength es el minimo aceptable para el secreto HMAC (128 bits). Un secreto mas corto
+// es debil frente a fuerza bruta sobre la firma HS256.
+const minSecretLength = 16
+
+var (
+	errWrongTokenType = errors.New("wrong token type")
+	// ErrWeakSecret protege contra firmar tokens con un secreto vacio o demasiado corto, que
+	// dejaria los tokens abiertos a falsificacion.
+	ErrWeakSecret = errors.New("jwt: secret must be at least 16 bytes")
+)
 
 // JWTService implementa domain.TokenService con JWT firmados con HMAC-SHA256.
 type JWTService struct {
@@ -26,11 +35,16 @@ type JWTService struct {
 }
 
 // NewJWTService crea el servicio con el secreto, los TTL de access y refresh, y un reloj inyectable.
-func NewJWTService(secret string, accessTTL, refreshTTL time.Duration, now func() time.Time) *JWTService {
+// Devuelve ErrWeakSecret si el secreto es vacio o demasiado corto: firmar con un secreto debil deja
+// los tokens abiertos a falsificacion, asi que se corta el arranque en vez de correr inseguro.
+func NewJWTService(secret string, accessTTL, refreshTTL time.Duration, now func() time.Time) (*JWTService, error) {
+	if len(secret) < minSecretLength {
+		return nil, ErrWeakSecret
+	}
 	if now == nil {
 		now = time.Now
 	}
-	return &JWTService{secret: []byte(secret), accessTTL: accessTTL, refreshTTL: refreshTTL, now: now}
+	return &JWTService{secret: []byte(secret), accessTTL: accessTTL, refreshTTL: refreshTTL, now: now}, nil
 }
 
 var _ domain.TokenService = (*JWTService)(nil)

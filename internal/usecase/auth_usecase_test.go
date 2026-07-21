@@ -185,6 +185,30 @@ func TestLogin(t *testing.T) {
 			t.Fatalf("got %v, want ErrInvalidCredentials", err)
 		}
 	})
+
+	t.Run("unknown email still runs a password comparison (timing mitigation)", func(t *testing.T) {
+		spy := &spyHasher{}
+		uc := usecase.NewAuthUseCase(newFakeUserRepo(), spy, fakeTokens{},
+			func() string { return "user-1" },
+			func() time.Time { return time.Date(2026, time.July, 21, 0, 0, 0, 0, time.UTC) },
+		)
+		_, _, _ = uc.Login(ctx, "ghost@example.com", "secret123")
+		if spy.compareCalls == 0 {
+			t.Fatal("login for an unknown email must still call Compare to equalize timing")
+		}
+	})
+}
+
+// spyHasher cuenta las llamadas a Compare para verificar la mitigacion de timing.
+type spyHasher struct{ compareCalls int }
+
+func (spyHasher) Hash(password string) (string, error) { return "hashed:" + password, nil }
+func (s *spyHasher) Compare(hash, password string) error {
+	s.compareCalls++
+	if hash != "hashed:"+password {
+		return errors.New("mismatch")
+	}
+	return nil
 }
 
 func TestRefresh(t *testing.T) {

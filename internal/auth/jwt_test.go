@@ -4,14 +4,35 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/nicolas2601/go-graphql-orders-api/internal/auth"
 )
 
+const testSecret = "test-secret-0123456789" // >= 16 bytes
+
 func fixedClock(t time.Time) func() time.Time { return func() time.Time { return t } }
+
+func mustService(t *testing.T, secret string, clock func() time.Time) *auth.JWTService {
+	t.Helper()
+	svc, err := auth.NewJWTService(secret, 15*time.Minute, 24*time.Hour, clock)
+	if err != nil {
+		t.Fatalf("NewJWTService: %v", err)
+	}
+	return svc
+}
+
+func TestNewJWTServiceRejectsWeakSecret(t *testing.T) {
+	for _, secret := range []string{"", "short"} {
+		if _, err := auth.NewJWTService(secret, time.Minute, time.Hour, nil); err == nil {
+			t.Fatalf("secret %q should be rejected", secret)
+		}
+	}
+}
 
 func TestJWTService(t *testing.T) {
 	base := time.Date(2026, time.July, 21, 12, 0, 0, 0, time.UTC)
-	svc := auth.NewJWTService("test-secret", 15*time.Minute, 24*time.Hour, fixedClock(base))
+	svc := mustService(t, testSecret, fixedClock(base))
 
 	t.Run("access token round-trips the user id", func(t *testing.T) {
 		token, err := svc.GenerateAccess("user-1")
@@ -44,8 +65,7 @@ func TestJWTService(t *testing.T) {
 
 	t.Run("expired token is rejected", func(t *testing.T) {
 		token, _ := svc.GenerateAccess("user-1")
-		// un verificador cuyo reloj esta despues de la expiracion del access (15m)
-		expired := auth.NewJWTService("test-secret", 15*time.Minute, 24*time.Hour, fixedClock(base.Add(time.Hour)))
+		expired := mustService(t, testSecret, fixedClock(base.Add(time.Hour)))
 		if _, err := expired.ParseAccess(token); err == nil {
 			t.Fatal("expired token should be rejected")
 		}
@@ -53,9 +73,26 @@ func TestJWTService(t *testing.T) {
 
 	t.Run("token signed with another secret is rejected", func(t *testing.T) {
 		token, _ := svc.GenerateAccess("user-1")
-		other := auth.NewJWTService("different-secret", 15*time.Minute, 24*time.Hour, fixedClock(base))
+		other := mustService(t, "different-secret-0123456789", fixedClock(base))
 		if _, err := other.ParseAccess(token); err == nil {
 			t.Fatal("token with wrong signature should be rejected")
+		}
+	})
+
+	// Regresion de seguridad: un token con alg "none" (o cualquier metodo distinto de HS256) debe
+	// rechazarse, para evitar el ataque clasico de confusion de algoritmo.
+	t.Run("token with alg none is rejected", func(t *testing.T) {
+		unsigned := jwt.NewWithClaims(jwt.SigningMethodNone, jwt.MapClaims{
+			"sub": "user-1",
+			"typ": "access",
+			"exp": base.Add(time.Hour).Unix(),
+		})
+		token, err := unsigned.SignedString(jwt.UnsafeAllowNoneSignatureType)
+		if err != nil {
+			t.Fatalf("sign none: %v", err)
+		}
+		if _, err := svc.ParseAccess(token); err == nil {
+			t.Fatal("alg=none token must be rejected")
 		}
 	})
 }
