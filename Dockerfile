@@ -13,9 +13,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/orders-
 FROM alpine:3.22 AS runtime
 RUN apk add --no-cache ca-certificates \
     && adduser -D -u 1001 appuser
-COPY --from=build /out/orders-api /usr/local/bin/orders-api
+COPY --from=build --chown=appuser:appuser /out/orders-api /usr/local/bin/orders-api
 USER appuser
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+# start-period da margen a las migraciones y el seed del arranque antes de marcar unhealthy.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8080/healthz || exit 1
 ENTRYPOINT ["orders-api"]

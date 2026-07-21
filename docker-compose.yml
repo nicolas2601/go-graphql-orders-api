@@ -7,12 +7,20 @@ services:
       LOG_LEVEL: info
       DATABASE_URL: postgres://orders:${POSTGRES_PASSWORD:-orders}@db:5432/orders?sslmode=disable
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-please}
-      SEED_PRODUCTS: "true"
+      SEED_PRODUCTS: ${SEED_PRODUCTS:-true}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
+    # Hardening: corre non-root, no necesita capabilities ni escribir al filesystem local.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
     restart: unless-stopped
 
   db:
@@ -24,6 +32,8 @@ services:
     # Sin puerto publicado al host: la base solo es accesible desde la red interna de compose.
     volumes:
       - pgdata:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U orders -d orders"]
       interval: 5s

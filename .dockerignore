@@ -4,8 +4,6 @@
 .claude
 openspec
 *.md
-.env
-.env.local
 bin/
 tmp/
 coverage.*
@@ -16,3 +14,11 @@ docker-compose.yml
 .gitattributes
 .gitignore
 .golangci.yml
+
+# Secretos y credenciales: nunca deben entrar a una capa de la imagen (el .dockerignore es el
+# unico gate real, no el .gitignore). Patrones amplios como defensa en profundidad.
+.env*
+*.pem
+*.key
+.ssh/
+.aws/
