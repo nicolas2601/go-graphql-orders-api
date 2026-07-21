@@ -47,9 +47,12 @@ func NewHandler(
 		gql.Use(extension.Introspection{})
 	}
 
-	endpoint := middleware.Auth(tokens)(
-		loaders.Middleware(users, products)(
-			http.MaxBytesHandler(gql, maxRequestBytes)))
+	// MaxBytes es la capa mas externa: rechaza payloads abusivos antes de gastar CPU verificando
+	// el token o creando loaders.
+	endpoint := http.MaxBytesHandler(
+		middleware.Auth(tokens)(
+			loaders.Middleware(users, products)(gql)),
+		maxRequestBytes)
 
 	mux := http.NewServeMux()
 	mux.Handle(graphQLPath, endpoint)

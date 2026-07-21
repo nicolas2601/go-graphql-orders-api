@@ -2,6 +2,7 @@ package loaders
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -41,6 +42,7 @@ func (s *spyUserRepo) GetByID(context.Context, string) (domain.User, error) {
 type spyProductRepo struct {
 	mu       sync.Mutex
 	calls    int
+	fetchErr error
 	products map[string]domain.Product
 }
 
@@ -48,6 +50,9 @@ func (s *spyProductRepo) FindByIDs(_ context.Context, ids []string) (map[string]
 	s.mu.Lock()
 	s.calls++
 	s.mu.Unlock()
+	if s.fetchErr != nil {
+		return nil, s.fetchErr
+	}
 	out := make(map[string]domain.Product, len(ids))
 	for _, id := range ids {
 		if p, ok := s.products[id]; ok {
@@ -95,12 +100,38 @@ func TestProductLoaderBatchesConcurrentLoads(t *testing.T) {
 	}
 }
 
-func TestProductLoaderMissingKeyReturnsError(t *testing.T) {
+func TestProductLoaderMissingKeyReturnsDomainNotFound(t *testing.T) {
 	spy := &spyProductRepo{products: map[string]domain.Product{}}
 	ctx := context.WithValue(context.Background(), ctxKey{}, newLoaders(nil, spy))
 
-	if _, err := LoadProduct(ctx, "ghost"); err == nil {
-		t.Fatal("expected an error for a missing key")
+	// Un id ausente del map se traduce al error tipado del dominio (no al sentinel de la libreria),
+	// para que el mapeo a extensions.code siga devolviendo PRODUCT_NOT_FOUND.
+	if _, err := LoadProduct(ctx, "ghost"); !errors.Is(err, domain.ErrProductNotFound) {
+		t.Fatalf("got %v, want ErrProductNotFound", err)
+	}
+}
+
+func TestProductLoaderFetchErrorPropagatesToAllLoads(t *testing.T) {
+	dbDown := errors.New("db down")
+	spy := &spyProductRepo{fetchErr: dbDown}
+	ctx := context.WithValue(context.Background(), ctxKey{}, newLoaders(nil, spy))
+
+	ids := []string{"a", "b", "c"}
+	errs := make([]error, len(ids))
+	var wg sync.WaitGroup
+	wg.Add(len(ids))
+	for i, id := range ids {
+		go func(i int, id string) {
+			defer wg.Done()
+			_, errs[i] = LoadProduct(ctx, id)
+		}(i, id)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if !errors.Is(err, dbDown) {
+			t.Fatalf("load %d: got %v, want the fetch error propagated", i, err)
+		}
 	}
 }
 
@@ -123,6 +154,14 @@ func TestUserLoaderBatchesConcurrentLoads(t *testing.T) {
 
 	if spy.calls != 1 {
 		t.Fatalf("expected concurrent user loads to batch into 1 call, got %d", spy.calls)
+	}
+}
+
+func TestUserLoaderMissingKeyReturnsDomainNotFound(t *testing.T) {
+	spy := &spyUserRepo{users: map[string]domain.User{}}
+	ctx := context.WithValue(context.Background(), ctxKey{}, newLoaders(spy, nil))
+	if _, err := LoadUser(ctx, "ghost"); !errors.Is(err, domain.ErrUserNotFound) {
+		t.Fatalf("got %v, want ErrUserNotFound", err)
 	}
 }
 

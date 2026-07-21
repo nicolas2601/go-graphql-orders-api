@@ -52,20 +52,30 @@ func from(ctx context.Context) (*Loaders, error) {
 	return l, nil
 }
 
-// LoadUser carga un usuario por id de forma batcheada.
+// LoadUser carga un usuario por id de forma batcheada. NO es un limite de autorizacion: solo hace
+// fetch por id. La autorizacion (que la orden sea del caller) es responsabilidad de la capa de
+// resolvers, que ya la aplica antes de que un UserID ajeno pueda llegar hasta aca.
 func LoadUser(ctx context.Context, id string) (domain.User, error) {
 	l, err := from(ctx)
 	if err != nil {
 		return domain.User{}, err
 	}
-	return l.users.Load(ctx, id)
+	user, err := l.users.Load(ctx, id)
+	if errors.Is(err, dataloadgen.ErrNotFound) {
+		return domain.User{}, domain.ErrUserNotFound
+	}
+	return user, err
 }
 
-// LoadProduct carga un producto por id de forma batcheada.
+// LoadProduct carga un producto por id de forma batcheada. Tampoco autoriza (ver LoadUser).
 func LoadProduct(ctx context.Context, id string) (domain.Product, error) {
 	l, err := from(ctx)
 	if err != nil {
 		return domain.Product{}, err
 	}
-	return l.products.Load(ctx, id)
+	product, err := l.products.Load(ctx, id)
+	if errors.Is(err, dataloadgen.ErrNotFound) {
+		return domain.Product{}, domain.ErrProductNotFound
+	}
+	return product, err
 }
