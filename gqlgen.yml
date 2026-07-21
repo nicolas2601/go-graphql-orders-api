@@ -1,0 +1,37 @@
+# Configuracion de gqlgen. Regenerar con: make generate
+
+schema:
+  - graph/schema.graphqls
+
+exec:
+  package: generated
+  filename: internal/delivery/graphql/generated/generated.go
+
+model:
+  package: model
+  filename: internal/delivery/graphql/model/models_gen.go
+
+resolver:
+  layout: follow-schema
+  dir: internal/delivery/graphql
+  package: graphql
+  filename_template: "{name}.resolvers.go"
+
+# Se autobindea al paquete de modelos: gqlgen usa los tipos hechos a mano (Order, OrderItem,
+# OrderStatus) y genera el resto (User, Product, AuthPayload, paginas, inputs).
+autobind:
+  - github.com/nicolas2601/go-graphql-orders-api/internal/delivery/graphql/model
+
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+      - github.com/99designs/gqlgen/graphql.Int
+  Int:
+    model:
+      - github.com/99designs/gqlgen/graphql.Int
+      - github.com/99designs/gqlgen/graphql.Int64
+      - github.com/99designs/gqlgen/graphql.Int32
+  Time:
+    model:
+      - github.com/99designs/gqlgen/graphql.Time
