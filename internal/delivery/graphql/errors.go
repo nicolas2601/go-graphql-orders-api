@@ -13,6 +13,14 @@ import (
 // codeInternal es el codigo para errores inesperados: no se filtra el detalle al cliente.
 const codeInternal = "INTERNAL_ERROR"
 
+// rateLimitedError es el error que se devuelve cuando se supera el limite de tasa de auth.
+func rateLimitedError() error {
+	return &gqlerror.Error{
+		Message:    "too many requests",
+		Extensions: map[string]any{"code": "RATE_LIMITED"},
+	}
+}
+
 // domainErrorCodes mapea los errores tipados del dominio a su codigo estable de GraphQL.
 var domainErrorCodes = []struct {
 	err  error

@@ -18,6 +18,9 @@ import (
 
 // Register is the resolver for the register field.
 func (r *mutationResolver) Register(ctx context.Context, input model.RegisterInput) (*model.AuthPayload, error) {
+	if err := r.allowAuth(ctx); err != nil {
+		return nil, err
+	}
 	pair, user, err := r.auth.Register(ctx, input.Email, input.Password)
 	if err != nil {
 		return nil, toGraphQLError(ctx, err)
@@ -27,6 +30,9 @@ func (r *mutationResolver) Register(ctx context.Context, input model.RegisterInp
 
 // Login is the resolver for the login field.
 func (r *mutationResolver) Login(ctx context.Context, input model.LoginInput) (*model.AuthPayload, error) {
+	if err := r.allowAuth(ctx); err != nil {
+		return nil, err
+	}
 	pair, user, err := r.auth.Login(ctx, input.Email, input.Password)
 	if err != nil {
 		return nil, toGraphQLError(ctx, err)

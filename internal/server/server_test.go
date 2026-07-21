@@ -1,7 +1,9 @@
 package server_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -25,10 +27,10 @@ func newHandler(t *testing.T, cfg config.Config) http.Handler {
 	// Estos tests no invocan resolvers (introspection, playground, limites), asi que los casos de
 	// uso pueden ser nil: las queries se rechazan antes de resolver o no tocan resolvers.
 	var _ domain.TokenService = tokens
-	resolver := graphqldelivery.NewResolver(nil, nil, nil, nil)
+	resolver := graphqldelivery.NewResolver(nil, nil, nil, nil, nil)
 	// Repos nil: estos tests no invocan resolvers (introspection/complejidad/tamano), asi que los
 	// DataLoaders nunca se ejecutan.
-	return server.NewHandler(cfg, resolver, tokens, nil, nil)
+	return server.NewHandler(server.Deps{Config: cfg, Resolver: resolver, Tokens: tokens})
 }
 
 func graphQLRequest(t *testing.T, query string) *http.Request {
@@ -48,6 +50,34 @@ func TestHealthz(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "ok") {
 		t.Fatalf("healthz: %d %s", rec.Code, rec.Body.String())
 	}
+}
+
+func TestReadyz(t *testing.T) {
+	tokens, err := auth.NewJWTService("test-secret-0123456789", 15*time.Minute, 24*time.Hour, nil)
+	if err != nil {
+		t.Fatalf("jwt: %v", err)
+	}
+	resolver := graphqldelivery.NewResolver(nil, nil, nil, nil, nil)
+
+	t.Run("ready when the check passes", func(t *testing.T) {
+		h := server.NewHandler(server.Deps{Config: config.Config{AppEnv: "development"}, Resolver: resolver, Tokens: tokens,
+			Ready: func(context.Context) error { return nil }})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("got %d, want 200", rec.Code)
+		}
+	})
+
+	t.Run("unavailable when the check fails", func(t *testing.T) {
+		h := server.NewHandler(server.Deps{Config: config.Config{AppEnv: "development"}, Resolver: resolver, Tokens: tokens,
+			Ready: func(context.Context) error { return errors.New("db down") }})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("got %d, want 503", rec.Code)
+		}
+	})
 }
 
 func TestPlaygroundDisabledInProduction(t *testing.T) {

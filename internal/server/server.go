@@ -1,11 +1,13 @@
-// Package server arma el handler HTTP: endpoint GraphQL con auth y controles anti-DoS, health check
-// y, en desarrollo, el playground.
+// Package server arma el handler HTTP: endpoint GraphQL con auth, DataLoaders, rate limiting y
+// controles anti-DoS; health/readiness checks y, en desarrollo, el playground.
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/extension"
@@ -26,47 +28,76 @@ const (
 	maxRequestBytes = 1 << 20 // 1 MiB
 	// queryComplexityLimit acota la complejidad de una operacion GraphQL (anti-DoS).
 	queryComplexityLimit = 200
+	// readinessTimeout acota el check de /readyz: un orquestador espera una respuesta rapida.
+	readinessTimeout = 2 * time.Second
 )
 
-// NewHandler arma el handler HTTP cableando los resolvers de GraphQL. La introspection y el
-// playground solo se habilitan en modo desarrollo (fail-safe). El endpoint GraphQL va detras del
-// middleware de auth, de los DataLoaders por request y de un limite de tamano de body.
-func NewHandler(
-	cfg config.Config,
-	resolver *graphqldelivery.Resolver,
-	tokens domain.TokenService,
-	users domain.UserRepository,
-	products domain.ProductRepository,
-) http.Handler {
-	schema := generated.NewExecutableSchema(generated.Config{Resolvers: resolver})
+// Deps agrupa las dependencias del handler HTTP.
+type Deps struct {
+	Config   config.Config
+	Resolver *graphqldelivery.Resolver
+	Tokens   domain.TokenService
+	Users    domain.UserRepository
+	Products domain.ProductRepository
+	// Ready verifica que la app este lista (por ejemplo, ping a la base). Si es nil, /readyz da ok.
+	Ready func(ctx context.Context) error
+}
+
+// NewHandler arma el handler HTTP. El endpoint GraphQL va detras de (de afuera hacia adentro):
+// request-id, recover, limite de tamano de body, IP del cliente, auth y DataLoaders. La
+// introspection y el playground solo se habilitan en desarrollo (fail-safe).
+func NewHandler(deps Deps) http.Handler {
+	schema := generated.NewExecutableSchema(generated.Config{Resolvers: deps.Resolver})
 
 	gql := handler.New(schema)
 	gql.AddTransport(transport.POST{})
 	gql.Use(extension.FixedComplexityLimit(queryComplexityLimit))
-	if cfg.IsDevelopment() {
+	if deps.Config.IsDevelopment() {
 		gql.Use(extension.Introspection{})
 	}
 
-	// MaxBytes es la capa mas externa: rechaza payloads abusivos antes de gastar CPU verificando
-	// el token o creando loaders.
+	// MaxBytes como capa mas externa del endpoint: rechaza payloads abusivos antes de gastar CPU.
 	endpoint := http.MaxBytesHandler(
-		middleware.Auth(tokens)(
-			loaders.Middleware(users, products)(gql)),
+		middleware.ClientIP(
+			middleware.Auth(deps.Tokens)(
+				loaders.Middleware(deps.Users, deps.Products)(gql))),
 		maxRequestBytes)
 
 	mux := http.NewServeMux()
 	mux.Handle(graphQLPath, endpoint)
 	mux.HandleFunc("/healthz", handleHealth)
-	if cfg.IsDevelopment() && cfg.GraphQLPlayground {
+	mux.HandleFunc("/readyz", readyHandler(deps.Ready))
+	if deps.Config.IsDevelopment() && deps.Config.GraphQLPlayground {
 		mux.Handle("/", playground.Handler("Orders API", graphQLPath))
 	}
-	return mux
+
+	// request-id y recover envuelven todo, para trazar y para que un panic no tumbe el proceso.
+	return middleware.RequestID(middleware.Recover(mux))
 }
 
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// readyHandler responde 200 si la app esta lista, o 503 si el check falla (readiness real).
+func readyHandler(ready func(ctx context.Context) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if ready != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), readinessTimeout)
+			defer cancel()
+			if err := ready(ctx); err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
+				return
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	}
+}
+
+func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
-		slog.Error("failed to write health response", "error", err)
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		slog.Error("failed to write response", "error", err)
 	}
 }
