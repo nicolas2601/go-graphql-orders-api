@@ -99,7 +99,11 @@ func (r *orderItemResolver) Product(ctx context.Context, obj *model.OrderItem) (
 	return toProductModel(product), nil
 }
 
-// Me is the resolver for the me field. Devuelve null si no hay usuario autenticado.
+// Me is the resolver for the me field. Responde "quien soy": devuelve null si no hay usuario
+// autenticado. Un token valido cuyo usuario ya no existe (cuenta borrada) tambien se trata como
+// "sin usuario actual" -> null, en vez de un error de lookup. Esto difiere a proposito de
+// product(id)/order(id), donde "no encontrado" es una consulta explicita y se expone como error
+// tipado (segun pide el enunciado).
 func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
 	userID, ok := authctx.UserID(ctx)
 	if !ok {
