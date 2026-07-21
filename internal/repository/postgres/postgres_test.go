@@ -43,7 +43,8 @@ func newHarness(t *testing.T) *harness {
 		tcpostgres.WithUsername("orders"),
 		tcpostgres.WithPassword("orders"),
 		testcontainers.WithWaitStrategy(
-			wait.ForListeningPort("5432/tcp").WithStartupTimeout(90*time.Second),
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).WithStartupTimeout(90*time.Second),
 		),
 	)
 	if err != nil {
