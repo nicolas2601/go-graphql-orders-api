@@ -3,6 +3,7 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registra el driver "pgx" para database/sql (usado por goose)
 	"github.com/pressly/goose/v3"
@@ -17,7 +18,11 @@ func RunMigrations(databaseURL string) error {
 	if err != nil {
 		return fmt.Errorf("open db for migrations: %w", err)
 	}
-	defer func() { _ = db.Close() }()
+	defer func() {
+		if cerr := db.Close(); cerr != nil {
+			slog.Warn("closing migration db connection", "error", cerr)
+		}
+	}()
 
 	goose.SetBaseFS(migrations.FS)
 	if err := goose.SetDialect("postgres"); err != nil {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/extension"
@@ -27,6 +28,8 @@ const (
 	maxRequestBytes = 1 << 20 // 1 MiB
 	// queryComplexityLimit acota la complejidad de una operacion GraphQL (anti-DoS).
 	queryComplexityLimit = 200
+	// readinessTimeout acota el check de /readyz: un orquestador espera una respuesta rapida.
+	readinessTimeout = 2 * time.Second
 )
 
 // Deps agrupa las dependencias del handler HTTP.
@@ -80,7 +83,9 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 func readyHandler(ready func(ctx context.Context) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if ready != nil {
-			if err := ready(r.Context()); err != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), readinessTimeout)
+			defer cancel()
+			if err := ready(ctx); err != nil {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
 				return
 			}

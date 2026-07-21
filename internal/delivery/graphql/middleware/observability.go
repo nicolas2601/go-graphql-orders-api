@@ -52,8 +52,13 @@ func ClientIPFromContext(ctx context.Context) string {
 }
 
 func clientIP(r *http.Request) string {
+	// Supuesto: la app corre detras de UN proxy confiable que hace append de la IP real del cliente
+	// al final de X-Forwarded-For (nginx $proxy_add_x_forwarded_for, ALB, etc.). Por eso se toma el
+	// ULTIMO valor: es el que agrego el proxy, despues de cualquier valor que el cliente haya podido
+	// falsificar. Tomar el primero seria spoofeable y anularia el rate limiting.
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return strings.TrimSpace(strings.Split(xff, ",")[0])
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[len(parts)-1])
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

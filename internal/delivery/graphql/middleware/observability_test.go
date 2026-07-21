@@ -35,16 +35,17 @@ func TestRequestIDGeneratesAndPropagates(t *testing.T) {
 }
 
 func TestClientIPExtractsFromRequest(t *testing.T) {
-	t.Run("uses X-Forwarded-For first hop", func(t *testing.T) {
+	t.Run("uses the last X-Forwarded-For hop (added by the trusted proxy), not a spoofable one", func(t *testing.T) {
 		var ip string
 		h := middleware.ClientIP(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 			ip = middleware.ClientIPFromContext(r.Context())
 		}))
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("X-Forwarded-For", "203.0.113.1, 10.0.0.1")
+		// El atacante manda "1.2.3.4" (spoof); el proxy confiable agrega la IP real al final.
+		req.Header.Set("X-Forwarded-For", "1.2.3.4, 203.0.113.7")
 		h.ServeHTTP(httptest.NewRecorder(), req)
-		if ip != "203.0.113.1" {
-			t.Fatalf("got %q, want 203.0.113.1", ip)
+		if ip != "203.0.113.7" {
+			t.Fatalf("got %q, want 203.0.113.7 (the real client added by the proxy, not the spoofed first hop)", ip)
 		}
 	})
 
