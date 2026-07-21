@@ -20,6 +20,7 @@ var (
 	ErrInvalidPrice      = errors.New("invalid price")
 	ErrInvalidStock      = errors.New("invalid stock")
 	ErrInsufficientStock = errors.New("insufficient stock")
+	ErrInvalidFilter     = errors.New("invalid product filter")
 
 	// Ordenes.
 	ErrEmptyOrder      = errors.New("order must have at least one item")
