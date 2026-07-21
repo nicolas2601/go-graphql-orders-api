@@ -1,0 +1,35 @@
+package domain
+
+import "time"
+
+// Product es un producto del catalogo.
+type Product struct {
+	ID        string
+	Name      string
+	Price     float64
+	Stock     int
+	CreatedAt time.Time
+}
+
+// NewProduct construye un producto validando sus invariantes.
+func NewProduct(id, name string, price float64, stock int, createdAt time.Time) (Product, error) {
+	p := Product{ID: id, Name: name, Price: price, Stock: stock, CreatedAt: createdAt}
+	if err := p.Validate(); err != nil {
+		return Product{}, err
+	}
+	return p, nil
+}
+
+// Validate verifica las invariantes de un producto.
+func (p Product) Validate() error {
+	if p.Name == "" {
+		return ErrInvalidName
+	}
+	if p.Price <= 0 {
+		return ErrInvalidPrice
+	}
+	if p.Stock < 0 {
+		return ErrInvalidStock
+	}
+	return nil
+}
