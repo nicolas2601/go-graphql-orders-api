@@ -26,6 +26,22 @@ func TestNewUser(t *testing.T) {
 			t.Fatalf("got %v, want ErrInvalidEmail", err)
 		}
 	})
+
+	t.Run("normalizes email to lowercase and trims spaces", func(t *testing.T) {
+		u, err := domain.NewUser("id-1", "  Nico@Example.COM  ", "hashed", now)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if u.Email != "nico@example.com" {
+			t.Fatalf("email not normalized: got %q", u.Email)
+		}
+	})
+}
+
+func TestNormalizeEmail(t *testing.T) {
+	if got := domain.NormalizeEmail("  USER@Domain.CO "); got != "user@domain.co" {
+		t.Fatalf("got %q, want user@domain.co", got)
+	}
 }
 
 func TestValidateEmail(t *testing.T) {
@@ -57,6 +73,12 @@ func TestValidatePassword(t *testing.T) {
 	})
 	t.Run("no digit returns ErrInvalidPassword", func(t *testing.T) {
 		if err := domain.ValidatePassword("onlyletters"); !errors.Is(err, domain.ErrInvalidPassword) {
+			t.Fatalf("got %v, want ErrInvalidPassword", err)
+		}
+	})
+	t.Run("longer than 72 bytes returns ErrInvalidPassword", func(t *testing.T) {
+		long := "a1" + string(make([]byte, 73)) // > 72 bytes
+		if err := domain.ValidatePassword(long); !errors.Is(err, domain.ErrInvalidPassword) {
 			t.Fatalf("got %v, want ErrInvalidPassword", err)
 		}
 	})

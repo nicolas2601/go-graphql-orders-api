@@ -40,7 +40,9 @@ func NewOrder(id, userID string, items []OrderItem, createdAt time.Time) (Order,
 		if item.Quantity <= 0 {
 			return Order{}, ErrInvalidQuantity
 		}
-		if item.UnitPrice < 0 {
+		// UnitPrice es un snapshot del precio del producto, que siempre es > 0; un precio unitario
+		// no positivo indica un bug del caller (por ejemplo, olvidar copiar el precio del producto).
+		if item.UnitPrice <= 0 {
 			return Order{}, ErrInvalidPrice
 		}
 		total += float64(item.Quantity) * item.UnitPrice
@@ -48,7 +50,7 @@ func NewOrder(id, userID string, items []OrderItem, createdAt time.Time) (Order,
 	return Order{
 		ID:        id,
 		UserID:    userID,
-		Items:     items,
+		Items:     append([]OrderItem(nil), items...), // copia defensiva: la orden no comparte el slice del caller
 		Total:     total,
 		Status:    StatusPending,
 		CreatedAt: createdAt,

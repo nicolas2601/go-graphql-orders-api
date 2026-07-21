@@ -47,10 +47,24 @@ func TestNewOrder(t *testing.T) {
 		}
 	})
 
-	t.Run("negative unit price returns ErrInvalidPrice", func(t *testing.T) {
-		items := []domain.OrderItem{{ProductID: "p1", Quantity: 1, UnitPrice: -1}}
-		if _, err := domain.NewOrder("o1", "u1", items, now); !errors.Is(err, domain.ErrInvalidPrice) {
-			t.Fatalf("got %v, want ErrInvalidPrice", err)
+	t.Run("non-positive unit price returns ErrInvalidPrice", func(t *testing.T) {
+		for _, price := range []float64{0, -1} {
+			items := []domain.OrderItem{{ProductID: "p1", Quantity: 1, UnitPrice: price}}
+			if _, err := domain.NewOrder("o1", "u1", items, now); !errors.Is(err, domain.ErrInvalidPrice) {
+				t.Fatalf("price %v: got %v, want ErrInvalidPrice", price, err)
+			}
+		}
+	})
+
+	t.Run("does not alias the caller's items slice", func(t *testing.T) {
+		items := sampleItems()
+		o, err := domain.NewOrder("o1", "u1", items, now)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		items[0].Quantity = 999 // mutar el slice del caller no debe afectar la orden ya construida
+		if o.Items[0].Quantity != 2 {
+			t.Fatalf("order shares the caller's slice: got quantity %d, want 2", o.Items[0].Quantity)
 		}
 	})
 }

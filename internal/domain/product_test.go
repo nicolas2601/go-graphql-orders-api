@@ -38,4 +38,11 @@ func TestNewProduct(t *testing.T) {
 			t.Fatalf("got %v, want ErrInvalidStock", err)
 		}
 	})
+
+	t.Run("name longer than the limit returns ErrInvalidName", func(t *testing.T) {
+		longName := string(make([]byte, 201))
+		if _, err := domain.NewProduct("id-1", longName, 49.90, 10, now); !errors.Is(err, domain.ErrInvalidName) {
+			t.Fatalf("got %v, want ErrInvalidName", err)
+		}
+	})
 }

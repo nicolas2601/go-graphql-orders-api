@@ -2,6 +2,9 @@ package domain
 
 import "time"
 
+// maxNameLength acota el nombre de un producto para evitar payloads abusivos.
+const maxNameLength = 200
+
 // Product es un producto del catalogo.
 type Product struct {
 	ID        string
@@ -22,7 +25,7 @@ func NewProduct(id, name string, price float64, stock int, createdAt time.Time) 
 
 // Validate verifica las invariantes de un producto.
 func (p Product) Validate() error {
-	if p.Name == "" {
+	if p.Name == "" || len(p.Name) > maxNameLength {
 		return ErrInvalidName
 	}
 	if p.Price <= 0 {
