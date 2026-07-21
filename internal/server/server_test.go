@@ -26,7 +26,9 @@ func newHandler(t *testing.T, cfg config.Config) http.Handler {
 	// uso pueden ser nil: las queries se rechazan antes de resolver o no tocan resolvers.
 	var _ domain.TokenService = tokens
 	resolver := graphqldelivery.NewResolver(nil, nil, nil, nil)
-	return server.NewHandler(cfg, resolver, tokens)
+	// Repos nil: estos tests no invocan resolvers (introspection/complejidad/tamano), asi que los
+	// DataLoaders nunca se ejecutan.
+	return server.NewHandler(cfg, resolver, tokens, nil, nil)
 }
 
 func graphQLRequest(t *testing.T, query string) *http.Request {

@@ -30,7 +30,9 @@ func newTestServer(t *testing.T) (http.Handler, *pgxpool.Pool) {
 
 	container, err := tcpostgres.Run(ctx, "postgres:16-alpine",
 		tcpostgres.WithDatabase("orders"), tcpostgres.WithUsername("orders"), tcpostgres.WithPassword("orders"),
-		testcontainers.WithWaitStrategy(wait.ForListeningPort("5432/tcp").WithStartupTimeout(90*time.Second)),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).WithStartupTimeout(90*time.Second)),
 	)
 	if err != nil {
 		t.Fatalf("start postgres: %v", err)
@@ -67,7 +69,7 @@ func newTestServer(t *testing.T) (http.Handler, *pgxpool.Pool) {
 		usecase.NewProductUseCase(productRepo),
 		usecase.NewOrderUseCase(orderRepo, productRepo, txManager, id, now),
 	)
-	handler := server.NewHandler(config.Config{AppEnv: "development"}, resolver, tokens)
+	handler := server.NewHandler(config.Config{AppEnv: "development"}, resolver, tokens, userRepo, productRepo)
 	return handler, pool
 }
 

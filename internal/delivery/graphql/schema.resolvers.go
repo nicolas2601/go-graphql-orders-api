@@ -11,6 +11,7 @@ import (
 
 	"github.com/nicolas2601/go-graphql-orders-api/internal/delivery/graphql/authctx"
 	"github.com/nicolas2601/go-graphql-orders-api/internal/delivery/graphql/generated"
+	"github.com/nicolas2601/go-graphql-orders-api/internal/delivery/graphql/loaders"
 	"github.com/nicolas2601/go-graphql-orders-api/internal/delivery/graphql/model"
 	"github.com/nicolas2601/go-graphql-orders-api/internal/domain"
 )
@@ -81,18 +82,19 @@ func (r *mutationResolver) CancelOrder(ctx context.Context, id string) (*model.O
 	return toOrderModel(order), nil
 }
 
-// User is the resolver for the user field. Resuelve el dueno de la orden por su id.
+// User is the resolver for the user field. Resuelve el dueno de la orden por DataLoader (batched).
 func (r *orderResolver) User(ctx context.Context, obj *model.Order) (*model.User, error) {
-	user, err := r.users.Get(ctx, obj.UserID)
+	user, err := loaders.LoadUser(ctx, obj.UserID)
 	if err != nil {
 		return nil, toGraphQLError(ctx, err)
 	}
 	return toUserModel(user), nil
 }
 
-// Product is the resolver for the product field. Resuelve el producto de la linea por su id.
+// Product is the resolver for the product field. Resuelve el producto por DataLoader (batched),
+// evitando el N+1 cuando una orden (o varias) tienen muchas lineas.
 func (r *orderItemResolver) Product(ctx context.Context, obj *model.OrderItem) (*model.Product, error) {
-	product, err := r.products.Get(ctx, obj.ProductID)
+	product, err := loaders.LoadProduct(ctx, obj.ProductID)
 	if err != nil {
 		return nil, toGraphQLError(ctx, err)
 	}
