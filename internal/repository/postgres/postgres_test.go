@@ -310,4 +310,25 @@ func TestPostgresIntegration(t *testing.T) {
 			t.Fatalf("rollback failed: stock is %d, want 10", h.stockOf(t, p.ID))
 		}
 	})
+
+	t.Run("panic inside a transaction rolls back and does not leak the connection", func(t *testing.T) {
+		h.reset(t)
+		p := h.seedProduct(t, "Widget", 10, 10)
+
+		func() {
+			defer func() { _ = recover() }() // capturamos el panic re-lanzado
+			_ = h.tx.WithinTx(ctx, func(ctx context.Context) error {
+				_ = h.products.DecrementStock(ctx, p.ID, 3)
+				panic("boom in fn")
+			})
+		}()
+
+		if h.stockOf(t, p.ID) != 10 {
+			t.Fatalf("panic did not roll back: stock is %d, want 10", h.stockOf(t, p.ID))
+		}
+		// La conexion no debe haberse perdido: el pool sigue respondiendo.
+		if _, err := h.products.GetByID(ctx, p.ID); err != nil {
+			t.Fatalf("connection leaked after panic: pool unusable: %v", err)
+		}
+	})
 }

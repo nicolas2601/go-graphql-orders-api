@@ -4,7 +4,9 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -36,19 +38,36 @@ var _ domain.TxManager = (*TxManager)(nil)
 
 // WithinTx abre una transaccion, la inyecta en el contexto y ejecuta fn. Hace commit si fn
 // devuelve nil, o rollback si devuelve error. El caso de uso solo ve esta interfaz.
+// El defer con recover garantiza el rollback incluso si fn entra en panic: sin el, la conexion
+// nunca se liberaria al pool (fuga silenciosa que termina agotandolo).
 func (m *TxManager) WithinTx(ctx context.Context, fn func(context.Context) error) error {
 	tx, err := m.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
+	defer func() {
+		if p := recover(); p != nil {
+			m.rollback(ctx, tx)
+			panic(p) // se revierte la tx pero el panic sigue su curso
+		}
+	}()
+
 	if err := fn(context.WithValue(ctx, txKey{}, tx)); err != nil {
-		_ = tx.Rollback(ctx)
+		m.rollback(ctx, tx)
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit tx: %w", err)
 	}
 	return nil
+}
+
+// rollback revierte la transaccion y loguea un fallo de rollback (que puede indicar una conexion
+// rota), sin taparlo en silencio. Un ErrTxClosed no es un problema: la tx ya estaba finalizada.
+func (m *TxManager) rollback(ctx context.Context, tx pgx.Tx) {
+	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		slog.ErrorContext(ctx, "tx rollback failed", "error", err)
+	}
 }
 
 // querier devuelve la transaccion del contexto si la hay, o el pool en caso contrario.

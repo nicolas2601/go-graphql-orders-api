@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/nicolas2601/go-graphql-orders-api/internal/domain"
@@ -187,5 +188,9 @@ func mergeLines(lines []OrderLine) []OrderLine {
 	for _, id := range order {
 		merged = append(merged, OrderLine{ProductID: id, Quantity: quantityByID[id]})
 	}
+	// Orden canonico por ProductID: dentro de la transaccion los locks (FOR UPDATE) se toman
+	// siempre en el mismo orden global, evitando deadlocks entre ordenes concurrentes que piden
+	// los mismos productos en distinta secuencia.
+	sort.Slice(merged, func(i, j int) bool { return merged[i].ProductID < merged[j].ProductID })
 	return merged
 }
