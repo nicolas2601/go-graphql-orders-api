@@ -69,16 +69,12 @@ entorno; el `.env` solo lo usa `docker compose` para interpolar variables.
 
 ## Decisión de diseño: manejo de transacciones
 
-La creación de una orden valida y descuenta el stock de cada producto y persiste la orden **en una
-sola transacción**, sin exponer el `*sql.Tx` al caso de uso. Se resuelve con un **Transaction Manager
-que propaga la transacción por el `context`**: el dominio define la interfaz `TxManager.WithinTx(ctx,
-fn)`; su implementación PostgreSQL abre la transacción, la inyecta en el contexto y hace commit o
-rollback según el resultado de `fn`. Los repositorios resuelven su ejecutor con un helper
-`querier(ctx)` que devuelve la transacción del contexto o el pool, de modo que son agnósticos a si
-corren dentro de una transacción. El descuento de stock es atómico (`UPDATE ... WHERE stock >= qty`),
-lo que evita sobreventa bajo concurrencia sin locks explícitos. Se descartó la alternativa de un
-Unit of Work explícito (más boilerplate) y la de meter la lógica en el repositorio (rompería la
-separación de capas).
+La creación de una orden descuenta el stock y persiste la orden en **una sola transacción**, sin
+exponer `*sql.Tx` al caso de uso: el dominio define `TxManager.WithinTx(ctx, fn)` y la
+implementación PostgreSQL propaga la transacción por el `context`; los repositorios resuelven su
+ejecutor con `querier(ctx)` (transacción o pool), quedando agnósticos a ella. El descuento es
+atómico (`UPDATE ... WHERE stock >= qty`), lo que evita sobreventa bajo concurrencia. Se descartaron
+un Unit of Work explícito (más boilerplate) y poner la lógica en el repositorio (rompe las capas).
 
 ## Arquitectura (Clean Architecture)
 
@@ -203,6 +199,9 @@ Dockerfile, docker-compose.yml  empaquetado y orquestación
   esquema GraphQL. Para dinero real lo correcto sería `NUMERIC`/decimal en centavos; deuda consciente.
 - **`unitPrice` como snapshot**: se congela el precio del producto al crear la orden, para que un
   cambio de precio posterior no altere las órdenes históricas.
+- **Soft delete en cancelaciones**: `cancelOrder` nunca borra la fila (no hay ningún `DELETE` de
+  órdenes en el código); la orden pasa a `CANCELLED` y se registra `cancelled_at`, preservando el
+  historial completo. El estado mismo implementa el soft delete pedido.
 - **`createdAt` como scalar `Time`** (RFC3339 UTC): mejora sobre el `String` del enunciado, para
   normalizar formato y zona horaria.
 - **`ORDER_NOT_OWNED` distinguible de `ORDER_NOT_FOUND`**: el enunciado pide mapear `ErrOrderNotOwned`
