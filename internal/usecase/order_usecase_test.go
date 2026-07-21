@@ -210,6 +210,15 @@ func TestOrderCreate(t *testing.T) {
 		}
 	})
 
+	t.Run("negative quantity is rejected before merging", func(t *testing.T) {
+		// p1:5 y p1:-3 no deben netear a 2: una cantidad negativa por linea es invalida.
+		uc := newOrderUseCase(newFakeOrderRepo(), catalog())
+		lines := []usecase.OrderLine{{ProductID: "p1", Quantity: 5}, {ProductID: "p1", Quantity: -3}}
+		if _, err := uc.Create(ctx, buyer, lines); !errors.Is(err, domain.ErrInvalidQuantity) {
+			t.Fatalf("got %v, want ErrInvalidQuantity", err)
+		}
+	})
+
 	t.Run("repository insert error propagates", func(t *testing.T) {
 		orders := newFakeOrderRepo()
 		orders.insertErr = errors.New("db down")

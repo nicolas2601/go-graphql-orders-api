@@ -41,6 +41,13 @@ func NewOrderUseCase(
 // cada producto, toma el precio unitario del producto (snapshot) y persiste la orden. Fusiona las
 // lineas repetidas del mismo producto. Si algo falla, la transaccion se revierte entera.
 func (uc *OrderUseCase) Create(ctx context.Context, userID string, lines []OrderLine) (domain.Order, error) {
+	// Se valida cada linea ANTES de fusionar: si no, una cantidad negativa podria "compensar" una
+	// positiva del mismo producto en el merge (p1:5 + p1:-3 = 2) y colar una orden distinta a la pedida.
+	for _, line := range lines {
+		if line.Quantity <= 0 {
+			return domain.Order{}, domain.ErrInvalidQuantity
+		}
+	}
 	lines = mergeLines(lines)
 	if len(lines) == 0 {
 		return domain.Order{}, domain.ErrEmptyOrder
@@ -50,9 +57,6 @@ func (uc *OrderUseCase) Create(ctx context.Context, userID string, lines []Order
 	err := uc.tx.WithinTx(ctx, func(ctx context.Context) error {
 		items := make([]domain.OrderItem, 0, len(lines))
 		for _, line := range lines {
-			if line.Quantity <= 0 {
-				return domain.ErrInvalidQuantity
-			}
 			product, err := uc.products.GetByID(ctx, line.ProductID)
 			if err != nil {
 				return err

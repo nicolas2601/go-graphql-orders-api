@@ -33,6 +33,8 @@ type ProductRepository interface {
 	// List devuelve una pagina de productos que cumplen el filtro, junto con el total sin paginar.
 	List(ctx context.Context, filter ProductFilter, page, pageSize int) ([]Product, int, error)
 	// GetByID devuelve el producto con ese id, o ErrProductNotFound si no existe o el id es invalido.
+	// Cuando se invoca dentro de WithinTx para crear una orden, la implementacion deberia leer el
+	// producto de forma consistente con el DecrementStock que sigue (mismo snapshot de precio/stock).
 	GetByID(ctx context.Context, id string) (Product, error)
 	// FindByIDs devuelve un mapa id -> producto para los ids dados (para el DataLoader). Los ids
 	// inexistentes no aparecen en el mapa.
