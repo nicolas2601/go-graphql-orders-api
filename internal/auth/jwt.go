@@ -84,7 +84,8 @@ func (s *JWTService) parse(tokenStr, expectedType string) (string, error) {
 	claims := jwt.MapClaims{}
 	_, err := jwt.ParseWithClaims(tokenStr, claims,
 		func(*jwt.Token) (any, error) { return s.secret, nil },
-		jwt.WithValidMethods([]string{"HS256"}),
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), // solo HS256: evita confusion de algoritmo
+		jwt.WithExpirationRequired(),                                 // rechaza tokens sin claim exp
 		jwt.WithTimeFunc(s.now),
 	)
 	if err != nil {
