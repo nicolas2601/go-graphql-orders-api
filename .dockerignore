@@ -1,0 +1,24 @@
+# Contexto de build minimo: solo lo necesario para compilar el binario.
+.git
+.github
+.claude
+openspec
+*.md
+bin/
+tmp/
+coverage.*
+*.out
+Dockerfile
+docker-compose.yml
+.dockerignore
+.gitattributes
+.gitignore
+.golangci.yml
+
+# Secretos y credenciales: nunca deben entrar a una capa de la imagen (el .dockerignore es el
+# unico gate real, no el .gitignore). Patrones amplios como defensa en profundidad.
+.env*
+*.pem
+*.key
+.ssh/
+.aws/

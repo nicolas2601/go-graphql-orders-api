@@ -1,0 +1,24 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - gosec # analisis estatico de seguridad (inyeccion, permisos, criptografia, etc.)
+  exclusions:
+    generated: lax
+    paths:
+      - internal/delivery/graphql/generated
+      - internal/delivery/graphql/model
+    rules:
+      # DSN de prueba con credenciales ficticias: gosec G101 lo marca como falso positivo.
+      - path: _test\.go
+        text: G101
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt

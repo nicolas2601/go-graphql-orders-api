@@ -1,7 +1,9 @@
+scalar Time
+
 type User {
   id: ID!
   email: String!
-  createdAt: String!
+  createdAt: Time!
 }
 
 type Product {
@@ -9,21 +11,7 @@ type Product {
   name: String!
   price: Float!
   stock: Int!
-}
-
-type Order {
-  id: ID!
-  user: User!
-  items: [OrderItem!]!
-  total: Float!
-  status: OrderStatus!
-  createdAt: String!
-}
-
-type OrderItem {
-  product: Product!
-  quantity: Int!
-  unitPrice: Float!
+  createdAt: Time!
 }
 
 enum OrderStatus {
@@ -32,9 +20,43 @@ enum OrderStatus {
   CANCELLED
 }
 
-type AuthPayload {
-  token: String!
+type OrderItem {
+  # product se resuelve por su propio resolver (DataLoader): el modelo solo lleva ProductID.
+  product: Product!
+  quantity: Int!
+  unitPrice: Float!
+}
+
+type Order {
+  id: ID!
+  # user se resuelve por su propio resolver (DataLoader): el modelo solo lleva UserID.
   user: User!
+  items: [OrderItem!]!
+  total: Float!
+  status: OrderStatus!
+  createdAt: Time!
+}
+
+type AuthPayload {
+  accessToken: String!
+  refreshToken: String!
+  user: User!
+}
+
+type ProductPage {
+  items: [Product!]!
+  total: Int!
+  page: Int!
+  pageSize: Int!
+  hasNextPage: Boolean!
+}
+
+type OrderPage {
+  items: [Order!]!
+  total: Int!
+  page: Int!
+  pageSize: Int!
+  hasNextPage: Boolean!
 }
 
 input RegisterInput {
@@ -62,30 +84,19 @@ input CreateOrderInput {
   items: [OrderItemInput!]!
 }
 
-type ProductPage {
-  items: [Product!]!
-  page: Int!
-  pageSize: Int!
-  total: Int!
-}
-
-type OrderPage {
-  items: [Order!]!
-  page: Int!
-  pageSize: Int!
-  total: Int!
-}
-
 type Query {
-  products(filter: ProductFilter, page: Int, pageSize: Int): ProductPage!
+  me: User
+  products(filter: ProductFilter, page: Int = 1, pageSize: Int = 20): ProductPage!
   product(id: ID!): Product
-  myOrders(page: Int, pageSize: Int): OrderPage!
+  myOrders(page: Int = 1, pageSize: Int = 20): OrderPage!
   order(id: ID!): Order
 }
 
 type Mutation {
   register(input: RegisterInput!): AuthPayload!
   login(input: LoginInput!): AuthPayload!
+  refreshToken(token: String!): AuthPayload!
   createOrder(input: CreateOrderInput!): Order!
+  confirmOrder(id: ID!): Order!
   cancelOrder(id: ID!): Order!
 }

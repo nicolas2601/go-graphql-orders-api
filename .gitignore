@@ -22,3 +22,6 @@ coverage.*
 
 # Go
 vendor/
+
+# OpenSpec tooling (no entregable)
+.claude/

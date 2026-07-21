@@ -1,0 +1,4 @@
+# Codigo generado por gqlgen: se marca como generado para diffs limpios en GitHub.
+# Solo el codigo realmente generado; model/models.go es escrito a mano (Order/OrderItem/OrderStatus).
+internal/delivery/graphql/generated/** linguist-generated=true
+internal/delivery/graphql/model/models_gen.go linguist-generated=true
