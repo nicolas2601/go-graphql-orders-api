@@ -13,12 +13,14 @@ type fakeProductRepo struct {
 	items       []domain.Product
 	total       int
 	listErr     error
+	gotFilter   domain.ProductFilter
 	gotPage     int
 	gotPageSize int
 	byID        map[string]domain.Product
 }
 
-func (f *fakeProductRepo) List(_ context.Context, _ domain.ProductFilter, page, pageSize int) ([]domain.Product, int, error) {
+func (f *fakeProductRepo) List(_ context.Context, filter domain.ProductFilter, page, pageSize int) ([]domain.Product, int, error) {
+	f.gotFilter = filter
 	f.gotPage, f.gotPageSize = page, pageSize
 	return f.items, f.total, f.listErr
 }
@@ -40,19 +42,23 @@ func (f *fakeProductRepo) IncrementStock(context.Context, string, int) error { r
 func TestProductList(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("returns a page with items and total", func(t *testing.T) {
+	t.Run("returns a page with items and total and passes the filter through", func(t *testing.T) {
 		repo := &fakeProductRepo{
 			items: []domain.Product{{ID: "p1"}, {ID: "p2"}},
 			total: 7,
 		}
 		uc := usecase.NewProductUseCase(repo)
 
-		page, err := uc.List(ctx, domain.ProductFilter{}, 2, 20)
+		name := "keyboard"
+		page, err := uc.List(ctx, domain.ProductFilter{Name: &name}, 2, 20)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(page.Items) != 2 || page.Total != 7 || page.Page != 2 || page.PageSize != 20 {
 			t.Fatalf("unexpected page: %+v", page)
+		}
+		if repo.gotFilter.Name == nil || *repo.gotFilter.Name != "keyboard" {
+			t.Fatalf("filter was not passed through intact: %+v", repo.gotFilter)
 		}
 	})
 
@@ -65,7 +71,9 @@ func TestProductList(t *testing.T) {
 			{"page below one becomes one", 0, 20, 1, 20},
 			{"negative page becomes one", -5, 20, 1, 20},
 			{"zero page size uses default", 1, 0, 1, 20},
-			{"page size above max is capped", 1, 1000, 1, 100},
+			{"page size at max stays", 1, 100, 1, 100},
+			{"page size just above max is capped", 1, 101, 1, 100},
+			{"page size far above max is capped", 1, 1000, 1, 100},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
@@ -91,6 +99,53 @@ func TestProductList(t *testing.T) {
 		uc := usecase.NewProductUseCase(&fakeProductRepo{listErr: sentinel})
 		if _, err := uc.List(ctx, domain.ProductFilter{}, 1, 20); !errors.Is(err, sentinel) {
 			t.Fatalf("got %v, want sentinel", err)
+		}
+	})
+
+	t.Run("invalid filter returns ErrInvalidFilter and does not hit the repository", func(t *testing.T) {
+		neg := -1.0
+		lo, hi := 100.0, 10.0
+		cases := map[string]domain.ProductFilter{
+			"negative min":  {MinPrice: &neg},
+			"negative max":  {MaxPrice: &neg},
+			"min above max": {MinPrice: &lo, MaxPrice: &hi},
+		}
+		for name, filter := range cases {
+			t.Run(name, func(t *testing.T) {
+				repo := &fakeProductRepo{}
+				uc := usecase.NewProductUseCase(repo)
+				if _, err := uc.List(ctx, filter, 1, 20); !errors.Is(err, domain.ErrInvalidFilter) {
+					t.Fatalf("got %v, want ErrInvalidFilter", err)
+				}
+				if repo.gotPageSize != 0 {
+					t.Fatal("repository should not be called on an invalid filter")
+				}
+			})
+		}
+	})
+}
+
+func TestPageHelpers(t *testing.T) {
+	t.Run("total pages rounds up", func(t *testing.T) {
+		p := usecase.Page[int]{Total: 21, Page: 1, PageSize: 10}
+		if p.TotalPages() != 3 {
+			t.Fatalf("got %d, want 3", p.TotalPages())
+		}
+	})
+	t.Run("zero page size yields zero pages", func(t *testing.T) {
+		p := usecase.Page[int]{Total: 5, PageSize: 0}
+		if p.TotalPages() != 0 {
+			t.Fatalf("got %d, want 0", p.TotalPages())
+		}
+	})
+	t.Run("has next page when not on the last page", func(t *testing.T) {
+		if !(usecase.Page[int]{Total: 21, Page: 1, PageSize: 10}).HasNextPage() {
+			t.Fatal("page 1 of 3 should have a next page")
+		}
+	})
+	t.Run("no next page on the last page", func(t *testing.T) {
+		if (usecase.Page[int]{Total: 21, Page: 3, PageSize: 10}).HasNextPage() {
+			t.Fatal("last page should not have a next page")
 		}
 	})
 }
