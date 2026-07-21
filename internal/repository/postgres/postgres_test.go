@@ -312,6 +312,23 @@ func TestPostgresIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("seed products is idempotent", func(t *testing.T) {
+		h.reset(t)
+		if err := postgres.SeedProducts(ctx, h.pool); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		if err := postgres.SeedProducts(ctx, h.pool); err != nil { // segunda vez: no duplica ni falla
+			t.Fatalf("seed again: %v", err)
+		}
+		var count int
+		if err := h.pool.QueryRow(ctx, "SELECT count(*) FROM products").Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 5 {
+			t.Fatalf("expected 5 seeded products, got %d", count)
+		}
+	})
+
 	t.Run("panic inside a transaction rolls back and does not leak the connection", func(t *testing.T) {
 		h.reset(t)
 		p := h.seedProduct(t, "Widget", 10, 10)
