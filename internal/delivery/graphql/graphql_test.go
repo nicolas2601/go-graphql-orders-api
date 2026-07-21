@@ -68,8 +68,15 @@ func newTestServer(t *testing.T) (http.Handler, *pgxpool.Pool) {
 		usecase.NewUserUseCase(userRepo),
 		usecase.NewProductUseCase(productRepo),
 		usecase.NewOrderUseCase(orderRepo, productRepo, txManager, id, now),
+		nil, // sin rate limiting en el e2e
 	)
-	handler := server.NewHandler(config.Config{AppEnv: "development"}, resolver, tokens, userRepo, productRepo)
+	handler := server.NewHandler(server.Deps{
+		Config:   config.Config{AppEnv: "development"},
+		Resolver: resolver,
+		Tokens:   tokens,
+		Users:    userRepo,
+		Products: productRepo,
+	})
 	return handler, pool
 }
 
