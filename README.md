@@ -217,4 +217,8 @@ Dockerfile, docker-compose.yml  empaquetado y orquestación
 - **CORS no configurado**: el enunciado indica "solo el servidor" (sin cliente browser); se agregaría
   con un frontend.
 - **`/healthz` es liveness; `/readyz` es readiness** (hace `pool.Ping`).
+- **Sin idempotencia en `createOrder`**: un retry de red del cliente podría crear dos órdenes. En un
+  sistema real se resolvería con una idempotency key; fuera del alcance del enunciado.
+- **Límite de complejidad GraphQL fijo (200)** sin funciones de complejidad por campo para listas: en
+  la práctica está acotado porque `pageSize` se recorta a 100 en la capa de aplicación.
 ```
