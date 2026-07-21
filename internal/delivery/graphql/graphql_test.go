@@ -67,7 +67,7 @@ func newTestServer(t *testing.T) (http.Handler, *pgxpool.Pool) {
 		usecase.NewProductUseCase(productRepo),
 		usecase.NewOrderUseCase(orderRepo, productRepo, txManager, id, now),
 	)
-	handler := server.NewHandler(config.Config{AppEnv: "development"}, resolver, tokens)
+	handler := server.NewHandler(config.Config{AppEnv: "development"}, resolver, tokens, userRepo, productRepo)
 	return handler, pool
 }
 

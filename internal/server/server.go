@@ -15,6 +15,7 @@ import (
 	"github.com/nicolas2601/go-graphql-orders-api/internal/config"
 	graphqldelivery "github.com/nicolas2601/go-graphql-orders-api/internal/delivery/graphql"
 	"github.com/nicolas2601/go-graphql-orders-api/internal/delivery/graphql/generated"
+	"github.com/nicolas2601/go-graphql-orders-api/internal/delivery/graphql/loaders"
 	"github.com/nicolas2601/go-graphql-orders-api/internal/delivery/graphql/middleware"
 	"github.com/nicolas2601/go-graphql-orders-api/internal/domain"
 )
@@ -29,8 +30,14 @@ const (
 
 // NewHandler arma el handler HTTP cableando los resolvers de GraphQL. La introspection y el
 // playground solo se habilitan en modo desarrollo (fail-safe). El endpoint GraphQL va detras del
-// middleware de auth y de un limite de tamano de body.
-func NewHandler(cfg config.Config, resolver *graphqldelivery.Resolver, tokens domain.TokenService) http.Handler {
+// middleware de auth, de los DataLoaders por request y de un limite de tamano de body.
+func NewHandler(
+	cfg config.Config,
+	resolver *graphqldelivery.Resolver,
+	tokens domain.TokenService,
+	users domain.UserRepository,
+	products domain.ProductRepository,
+) http.Handler {
 	schema := generated.NewExecutableSchema(generated.Config{Resolvers: resolver})
 
 	gql := handler.New(schema)
@@ -40,8 +47,12 @@ func NewHandler(cfg config.Config, resolver *graphqldelivery.Resolver, tokens do
 		gql.Use(extension.Introspection{})
 	}
 
+	endpoint := middleware.Auth(tokens)(
+		loaders.Middleware(users, products)(
+			http.MaxBytesHandler(gql, maxRequestBytes)))
+
 	mux := http.NewServeMux()
-	mux.Handle(graphQLPath, middleware.Auth(tokens)(http.MaxBytesHandler(gql, maxRequestBytes)))
+	mux.Handle(graphQLPath, endpoint)
 	mux.HandleFunc("/healthz", handleHealth)
 	if cfg.IsDevelopment() && cfg.GraphQLPlayground {
 		mux.Handle("/", playground.Handler("Orders API", graphQLPath))
