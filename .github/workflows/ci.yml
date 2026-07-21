@@ -44,7 +44,7 @@ jobs:
       - name: Check go.mod tidiness
         run: |
           go mod tidy
-          git diff --exit-code go.mod go.sum
+          git diff --exit-code
       - name: Test (race + coverage; Postgres via testcontainers on the runner's Docker)
         run: go test ./... -race -covermode=atomic -coverprofile=coverage.out
       - name: Coverage summary
