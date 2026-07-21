@@ -1,0 +1,18 @@
+# Contexto de build minimo: solo lo necesario para compilar el binario.
+.git
+.github
+.claude
+openspec
+*.md
+.env
+.env.local
+bin/
+tmp/
+coverage.*
+*.out
+Dockerfile
+docker-compose.yml
+.dockerignore
+.gitattributes
+.gitignore
+.golangci.yml
